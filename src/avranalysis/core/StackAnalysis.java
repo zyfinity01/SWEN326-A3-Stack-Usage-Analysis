@@ -2,6 +2,8 @@ package avranalysis.core;
 
 import javr.core.AvrDecoder;
 import javr.core.AvrInstruction;
+import javr.core.AvrInstruction.AbsoluteAddress;
+import javr.core.AvrInstruction.Address;
 import javr.core.AvrInstruction.RelativeAddress;
 import javr.io.HexFile;
 import javr.memory.ElasticByteMemory;
@@ -97,13 +99,34 @@ public class StackAnalysis {
         throw new RuntimeException("implement me!"); //$NON-NLS-1$
       }
       case CALL: {
-        throw new RuntimeException("implement me!"); //$NON-NLS-1$
+    	  AbsoluteAddress branch = (AbsoluteAddress) instruction;
+    	  // Explore the branch target
+    	  traverse(branch.k, currentHeight + 2);
+    	    
+    	  // Then continue
+    	  traverse(pc, currentHeight);
+    	  break;
       }
       case RCALL: {
-        throw new RuntimeException("implement me!"); //$NON-NLS-1$
+          // NOTE: this one is implemented for you.
+          RelativeAddress branch = (RelativeAddress) instruction;
+          // Check whether infinite loop; if so, terminate.
+          if (branch.k != -1) {
+            // Explore the branch target
+            traverse(pc + branch.k, currentHeight + 2);
+          }
+          break;
+   
       }
       case JMP: {
-        throw new RuntimeException("implement me!"); //$NON-NLS-1$
+      AvrInstruction.JMP branch = (AvrInstruction.JMP) instruction;
+      	// Check whether infinite loop; if so, terminate.
+      	if (branch.k != -1) {
+    	  // Explore the branch target
+    	  traverse(branch.k, currentHeight);
+      	}
+      //
+      	break;
       }
       case RJMP: {
         // NOTE: this one is implemented for you.
@@ -117,12 +140,17 @@ public class StackAnalysis {
         break;
       }
       case RET:
+    	  return;
       case RETI:
         throw new RuntimeException("implement me!"); //$NON-NLS-1$
       case PUSH:
-        throw new RuntimeException("implement me!"); //$NON-NLS-1$
+          // Increment the stack height by 1 byte and traverse to the next instruction
+          traverse(pc, currentHeight + 1);
+          break;
       case POP:
-        throw new RuntimeException("implement me!"); //$NON-NLS-1$
+          // Decrement the stack height by 1 byte and traverse to the next instruction
+          traverse(pc, currentHeight - 1);
+          break;
       default:
         // Indicates a standard instruction where control is transferred to the
         // following instruction.
