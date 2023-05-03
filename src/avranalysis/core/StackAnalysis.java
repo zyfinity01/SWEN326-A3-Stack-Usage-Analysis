@@ -4,7 +4,14 @@ import javr.core.AvrDecoder;
 import javr.core.AvrInstruction;
 import javr.core.AvrInstruction.AbsoluteAddress;
 import javr.core.AvrInstruction.Address;
+import javr.core.AvrInstruction.BREQ;
+import javr.core.AvrInstruction.BRGE;
+import javr.core.AvrInstruction.BRLT;
+import javr.core.AvrInstruction.Register;
+import javr.core.AvrInstruction.RegisterRegister;
+import javr.core.AvrInstruction.RegisterRelativeAddress;
 import javr.core.AvrInstruction.RelativeAddress;
+import javr.core.AvrInstruction.SBRS;
 import javr.io.HexFile;
 import javr.memory.ElasticByteMemory;
 
@@ -90,13 +97,43 @@ public class StackAnalysis {
    */
   private void process(AvrInstruction instruction, int pc, int currentHeight) {
     switch (instruction.getOpcode()) {
-      case BREQ:
-      case BRGE:
+      case BREQ: {
+    	  BREQ branch = (BREQ) instruction;
+    	  // If the Zero Flag (Z) is set (Z = 1), branch to the target location.
+    	  if (branch.k == 1) {
+    	    // Explore the branch target
+    	    traverse(pc + branch.k, currentHeight);
+    	  }
+    	  // If the Zero Flag (Z) is not set (Z = 0), continue with the next instruction.
+    	  traverse(pc, currentHeight);
+    	  break; 
+      }
+      case BRGE: {
+    	  BRGE branch = (BRGE) instruction;
+    	  if (branch.k >= 1) {
+    	    // Explore the branch target
+    	    traverse(pc + branch.k, currentHeight);
+    	  }
+    	  traverse(pc, currentHeight);
+    	  break; 
+      }
       case BRLT: {
-        throw new RuntimeException("implement me!"); //$NON-NLS-1$
+    	  BRLT branch = (BRLT) instruction;
+    	  if (branch.k < 1) {
+    	    // Explore the branch target
+    	    traverse(pc + branch.k, currentHeight);
+    	  }
+    	  traverse(pc, currentHeight);
+    	  break; 
       }
       case SBRS: {
-        throw new RuntimeException("implement me!"); //$NON-NLS-1$
+    	  SBRS branch = (SBRS) instruction;
+    	  if (branch.Rd * branch.b == 1) {
+      	    // Explore the branch target
+      	    traverse(pc + 1, currentHeight);
+      	  }
+      	  traverse(pc, currentHeight);
+      	  break; 
       }
       case CALL: {
     	  AbsoluteAddress branch = (AbsoluteAddress) instruction;
@@ -108,13 +145,13 @@ public class StackAnalysis {
     	  break;
       }
       case RCALL: {
-          // NOTE: this one is implemented for you.
           RelativeAddress branch = (RelativeAddress) instruction;
           // Check whether infinite loop; if so, terminate.
           if (branch.k != -1) {
             // Explore the branch target
             traverse(pc + branch.k, currentHeight + 2);
           }
+          traverse(pc + branch.k, currentHeight);
           break;
    
       }
