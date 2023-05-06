@@ -1,5 +1,7 @@
 package avranalysis.core;
 
+import java.util.HashMap;
+
 import javr.core.AvrDecoder;
 import javr.core.AvrInstruction;
 import javr.core.AvrInstruction.AbsoluteAddress;
@@ -37,6 +39,11 @@ public class StackAnalysis {
    * Records the maximum height seen so far.
    */
   private int maxHeight;
+  
+  /**
+   * Instructions that have been visited.
+   */
+  //private HashMap<Integer, Integer> visitedInstructions = new HashMap<>(); 
 
   /**
    * Construct a new analysis instance for a given hex file.
@@ -60,7 +67,7 @@ public class StackAnalysis {
     // Reset the maximum, height
     this.maxHeight = 0;
     // Traverse instructions starting at beginning
-    traverse(0, 0);
+    traverse(0, 0, new HashMap<Integer, Integer>());
     // Return the maximum height observed
     return this.maxHeight;
   }
@@ -72,20 +79,47 @@ public class StackAnalysis {
    * @param pc            Program Counter of instruction to traverse
    * @param currentHeight Current height of the stack at this point (in bytes)
    */
-  private void traverse(int pc, int currentHeight) {
+  private void traverse(int pc, int currentHeight, HashMap<Integer, Integer> instructions) {
+	  
+	  
+	HashMap<Integer, Integer> visitedInstructions = new HashMap<>(instructions); 
     // Check whether current stack height is maximum
     this.maxHeight = Math.max(this.maxHeight, currentHeight);
+    
+    if(visitedInstructions.containsKey(pc)) {
+
+    	//Unstable Stack Height. Assume worst case.
+    	if (currentHeight > visitedInstructions.get(pc) ) {
+    		this.maxHeight = Integer.MAX_VALUE;
+    		return;
+    	}
+    	
+    	//Stackable Stack Height
+    	if (visitedInstructions.get(pc) == currentHeight) {
+    		//visitedInstructions.remove(pc);
+    		return;
+    	}
+    }
+    
+    visitedInstructions.put(pc, currentHeight);
+    
     // Check whether we have terminated or not
     if ((pc * 2) >= this.firmware.size()) {
       // We've gone over end of instruction sequence, so stop.
       return;
     }
+    
+    
     // Process instruction at this address
     AvrInstruction instruction = decodeInstructionAt(pc);
+    
+
+    
+    
     // Move to the next logical instruction as this is always the starting point.
     int next = pc + instruction.getWidth();
     //
-    process(instruction, next, currentHeight);
+    process(instruction, next, currentHeight, visitedInstructions);
   }
 
   /**
@@ -95,53 +129,30 @@ public class StackAnalysis {
    * @param pc            Program counter of following instruction
    * @param currentHeight Current height of the stack at this point (in bytes)
    */
-  private void process(AvrInstruction instruction, int pc, int currentHeight) {
+  private void process(AvrInstruction instruction, int pc, int currentHeight, HashMap<Integer, Integer> instructions) {
     switch (instruction.getOpcode()) {
-      case BREQ: {
-    	  BREQ branch = (BREQ) instruction;
-    	  // If the Zero Flag (Z) is set (Z = 1), branch to the target location.
-    	  if (branch.k == 1) {
-    	    // Explore the branch target
-    	    traverse(pc + branch.k, currentHeight);
-    	  }
-    	  // If the Zero Flag (Z) is not set (Z = 0), continue with the next instruction.
-    	  traverse(pc, currentHeight);
-    	  break; 
-      }
-      case BRGE: {
-    	  BRGE branch = (BRGE) instruction;
-    	  if (branch.k >= 1) {
-    	    // Explore the branch target
-    	    traverse(pc + branch.k, currentHeight);
-    	  }
-    	  traverse(pc, currentHeight);
-    	  break; 
-      }
+      case BREQ:
+      case BRGE:
       case BRLT: {
-    	  BRLT branch = (BRLT) instruction;
-    	  if (branch.k < 1) {
-    	    // Explore the branch target
-    	    traverse(pc + branch.k, currentHeight);
-    	  }
-    	  traverse(pc, currentHeight);
+          RelativeAddress branch = (RelativeAddress) instruction;
+    	  traverse(pc + branch.k, currentHeight, instructions);
+    	  traverse(pc, currentHeight, instructions);
     	  break; 
       }
       case SBRS: {
-    	  SBRS branch = (SBRS) instruction;
-    	  if (branch.Rd * branch.b == 1) {
-      	    // Explore the branch target
-      	    traverse(pc + 1, currentHeight);
-      	  }
-      	  traverse(pc, currentHeight);
-      	  break; 
+          AvrInstruction nextInstruction = decodeInstructionAt(pc);
+          // Traverse both paths: skipped and not skipped
+          traverse(pc + nextInstruction.getWidth(), currentHeight, instructions); // Skipped
+          traverse(pc, currentHeight, instructions); // Not skipped
+          break;
       }
       case CALL: {
     	  AbsoluteAddress branch = (AbsoluteAddress) instruction;
     	  // Explore the branch target
-    	  traverse(branch.k, currentHeight + 2);
+    	  traverse(branch.k, currentHeight + 2, instructions);
     	    
     	  // Then continue
-    	  traverse(pc, currentHeight);
+    	  traverse(pc, currentHeight, instructions);
     	  break;
       }
       case RCALL: {
@@ -149,20 +160,19 @@ public class StackAnalysis {
           // Check whether infinite loop; if so, terminate.
           if (branch.k != -1) {
             // Explore the branch target
-            traverse(pc + branch.k, currentHeight + 2);
+            traverse(pc + branch.k, currentHeight + 2, instructions);
           }
-          traverse(pc + branch.k, currentHeight);
+          traverse(pc + branch.k, currentHeight, instructions);
           break;
    
       }
       case JMP: {
-      AvrInstruction.JMP branch = (AvrInstruction.JMP) instruction;
+    	  AbsoluteAddress branch = (AbsoluteAddress) instruction;
       	// Check whether infinite loop; if so, terminate.
       	if (branch.k != -1) {
     	  // Explore the branch target
-    	  traverse(branch.k, currentHeight);
+    	  traverse(branch.k, currentHeight, instructions);
       	}
-      //
       	break;
       }
       case RJMP: {
@@ -171,7 +181,7 @@ public class StackAnalysis {
         // Check whether infinite loop; if so, terminate.
         if (branch.k != -1) {
           // Explore the branch target
-          traverse(pc + branch.k, currentHeight);
+          traverse(pc + branch.k, currentHeight, instructions);
         }
         //
         break;
@@ -179,19 +189,19 @@ public class StackAnalysis {
       case RET:
     	  return;
       case RETI:
-        throw new RuntimeException("implement me!"); //$NON-NLS-1$
+    	  return;
       case PUSH:
           // Increment the stack height by 1 byte and traverse to the next instruction
-          traverse(pc, currentHeight + 1);
+          traverse(pc, currentHeight + 1, instructions);
           break;
       case POP:
           // Decrement the stack height by 1 byte and traverse to the next instruction
-          traverse(pc, currentHeight - 1);
+          traverse(pc, currentHeight - 1, instructions);
           break;
       default:
         // Indicates a standard instruction where control is transferred to the
         // following instruction.
-        traverse(pc, currentHeight);
+        traverse(pc, currentHeight, instructions);
     }
   }
 
