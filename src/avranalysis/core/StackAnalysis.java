@@ -131,15 +131,48 @@ public class StackAnalysis {
    */
   private void process(AvrInstruction instruction, int pc, int currentHeight, HashMap<Integer, Integer> instructions) {
     switch (instruction.getOpcode()) {
-      case BREQ:
       case BRGE:
-      case BRLT: {
+      case BRSH:
+      case BRLT:
+      case BRTS:
+      case BRVC:
+      case BRVS:
+      case BRBC:
+      case BRBS:
+      case BRHC:
+      case BRHS:
+      case BRID:
+      case BRIE:
+      case BRLO:
+      case BRMI:
+      case BRNE:
+      case BRPL:
+      case BREQ: {
           RelativeAddress branch = (RelativeAddress) instruction;
-    	  traverse(pc + branch.k, currentHeight, instructions);
-    	  traverse(pc, currentHeight, instructions);
-    	  break; 
+          traverse(pc + branch.k, currentHeight, instructions);
+          traverse(pc, currentHeight, instructions);
+          break; 
       }
+      case SBIC:
+      case SBIS:
+      case SBRC:
       case SBRS: {
+          AvrInstruction nextInstruction = decodeInstructionAt(pc);
+          // Traverse both paths: skipped and not skipped
+          traverse(pc + nextInstruction.getWidth(), currentHeight, instructions); // Skipped
+          traverse(pc, currentHeight, instructions); // Not skipped
+          break;
+      }
+      case IN:
+      case OUT:
+      case SBIW:
+      case ADIW:
+      case SBCI:
+      case SUBI: {
+          traverse(pc, currentHeight, instructions);
+          break;
+      }
+      case CPSE: {
           AvrInstruction nextInstruction = decodeInstructionAt(pc);
           // Traverse both paths: skipped and not skipped
           traverse(pc + nextInstruction.getWidth(), currentHeight, instructions); // Skipped
@@ -162,17 +195,16 @@ public class StackAnalysis {
             // Explore the branch target
             traverse(pc + branch.k, currentHeight + 2, instructions);
           }
-          traverse(pc + branch.k, currentHeight, instructions);
+          traverse(pc, currentHeight, instructions);
           break;
    
       }
       case JMP: {
     	  AbsoluteAddress branch = (AbsoluteAddress) instruction;
       	// Check whether infinite loop; if so, terminate.
-      	if (branch.k != -1) {
-    	  // Explore the branch target
-    	  traverse(branch.k, currentHeight, instructions);
-      	}
+
+    	traverse(branch.k, currentHeight, instructions);
+      	
       	break;
       }
       case RJMP: {
